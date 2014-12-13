@@ -6,7 +6,9 @@ import string
 from optparse import OptionParser
 import re
 
-def extractSplitsFromBwaMem(inFile,numSplits,includeDups,minNonOverlap):
+def extractSplitsFromBwaMem(inFile, numSplits, includeDups, \
+				    minNonOverlap, minIndelSize, \
+				    maxUnmappedBases):
 	if inFile == "stdin":
 		data = sys.stdin
 	else:
@@ -24,7 +26,9 @@ def extractSplitsFromBwaMem(inFile,numSplits,includeDups,minNonOverlap):
 			if "SA:" in el:
 				if(len(el.split(";")))<=numSplits:
 					split = 1
-					mate = el.split(",")
+					mate = el[5:].split(",")
+                                        mateChrom = mate[0]
+					matePos = int(mate[1])
 					mateCigar = mate[3]
 					mateFlag = int(0)
 					if mate[2]=="-": mateFlag = int(16)
@@ -42,8 +46,29 @@ def extractSplitsFromBwaMem(inFile,numSplits,includeDups,minNonOverlap):
 			nonOverlap1 = 1 + readQueryPos.qePos - readQueryPos.qsPos - overlap
 			nonOverlap2 = 1 + mateQueryPos.qePos - mateQueryPos.qsPos - overlap
 			mno = min(nonOverlap1, nonOverlap2)
-			if mno >= minNonOverlap:
-				print "\t".join(samList)
+
+			# check for deserts and diagonal difference
+                        if sam.ref == mateChrom and (sam.flag & 16) == (mateFlag & 16):
+				if sam.flag & 16: # reverse strand
+					leftDiag = getStartDiag(sam.pos, sam.cigar)
+					rightDiag = getEndDiag(matePos, mateCigar)
+					insSize = rightDiag - leftDiag
+				else: # not reverse strand
+					leftDiag = getEndDiag(sam.pos, sam.cigar)
+					rightDiag = getStartDiag(matePos, mateCigar)
+					insSize = leftDiag - rightDiag
+				desert = readQueryPos.qePos - mateQueryPos.qsPos - 1
+				if abs(insSize) < minIndelSize or \
+					    (desert > 0 and desert - max(0, insSize) > maxUnmappedBases):
+					continue
+
+			# check minNonOverlap
+			if mno < minNonOverlap:
+				continue
+
+			
+			# passed all filters
+			print "\t".join(samList)
 
 #--------------------------------------------------------------------------------------------------
 # functions
@@ -160,6 +185,29 @@ def calcQueryOverlap(s1,e1,s2,e2):
 	o = 1 + min(e1, e2) - max(s1, s2)
 	return max(0, o)
 
+def getStartDiag(align_pos, cigar):
+	keys = re.findall('[MIDNSHPX=]+', cigar)
+        nums = map(int, re.findall('[^MIDNSHPX=]+', cigar))
+
+	p = align_pos
+	if keys[0] == 'S' or keys[0] == 'H':
+		p -= nums[0]
+	return p
+
+def getEndDiag(align_pos, cigar):
+	keys = re.findall('[MIDNSHPX=]+', cigar)
+        nums = map(int, re.findall('[^MIDNSHPX=]+', cigar))
+
+	p = align_pos
+	for i in xrange(len(keys)):
+		k = keys[i]
+		n = nums[i]
+		if k == 'M' or k == 'N' or k == 'D' \
+			    or k == '=' or k == 'X' \
+			    or k == 'H' or k == 'S':
+			p += n
+	return p
+
 ###############################################
 
 class Usage(Exception):
@@ -188,13 +236,22 @@ Works on read or position sorted SAM input. Tested on bwa mem v0.7.5a-r405.
 	parser.add_option("-m", "--minNonOverlap", dest="minNonOverlap", default=20, type = "int", 
 		help="minimum non-overlap between split alignments on the query (default=20)",
 		metavar="INT")
+	parser.add_option("-s", "--minIndelSize", dest="minIndelSize", default=50, type = "int",
+		help="Minimum structural variant feature size for split alignments to be included in splitter file (default=50)",
+                metavar="INT")
+	parser.add_option("-u", "--maxUnmappedBases", dest="maxUnmappedBases", default=50, type = "int",
+		help="Maximum number of un-aligned bases between two alignments to be included in splitter file (default=50)",
+                metavar="INT")
+
 	(opts, args) = parser.parse_args()
 	if opts.inFile is None:
 		parser.print_help()
 		print
 	else:
 		try:
-			extractSplitsFromBwaMem(opts.inFile, opts.numSplits, opts.includeDups, opts.minNonOverlap)
+			extractSplitsFromBwaMem(opts.inFile, opts.numSplits, opts.includeDups, \
+							opts.minNonOverlap, opts.minIndelSize, \
+							opts.maxUnmappedBases)
 		except IOError as err:
 			sys.stderr.write("IOError " + str(err) + "\n");
 			return
