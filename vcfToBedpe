@@ -104,7 +104,7 @@ def vcfToBedpe(vcf_file, bedpe_out):
             name = v[2]
             score = v[5]
 
-            strands = var.info['STR']
+            strands = var.info['STRANDS']
             o1 = strands[0]
             o2 = strands[1]
 
@@ -129,9 +129,13 @@ def vcfToBedpe(vcf_file, bedpe_out):
                     svtype = 'DUP'
                 elif o2 == '-':
                     svtype = 'INV'
-
-            evtype = var.info['EVTYPE']
-
+            
+            ev_list = list()
+            for ev in ['PE', 'SR']:
+                if int(var.info[ev]) > 0:
+                    ev_list.append(ev)
+            evtype = ','.join(ev_list)
+                    
             format_list = v[8].split(':')
             sample_gt = dict()
             var_sample_list = []
@@ -141,13 +145,13 @@ def vcfToBedpe(vcf_file, bedpe_out):
                 format_dict = dict(zip(format_list, gt.split(':')))
                 format_dict['PE'] = int(format_dict['PE'])
                 format_dict['SR'] = int(format_dict['SR'])
-                format_dict['SUP'] = int(format_dict['SUP'])
-                if format_dict['SUP'] > 0:
+                format_dict['SU'] = int(format_dict['SU'])
+                if format_dict['SU'] > 0:
                     var_sample_list.append(sample_list[i])
                 sample_gt[s] = format_dict
 
-            gt_string = '\t'.join(map(str,[sample_gt[s]['SUP'] for s in sample_list]))
-            support = sum([sample_gt[s]['SUP'] for s in sample_list])
+            gt_string = '\t'.join(map(str,[sample_gt[s]['SU'] for s in sample_list]))
+            support = sum([sample_gt[s]['SU'] for s in sample_list])
 
             bedpe_out.write('\t'.join(map(str,
                                           [var.chrom,
@@ -170,18 +174,14 @@ def vcfToBedpe(vcf_file, bedpe_out):
 
         else:
             if var.info['MATEID'] in [mate.var_id for mate in unmatched]:
-                if 'PRIN' in var.info.keys():
-                    prim = var
-                    sec = mate
-                elif 'PRIN' in mate.info.keys():
-                    prim = mate
-                    sec = var
+                prim = mate
+                sec = var
 
                 b1 = prim.pos
                 b2 = sec.pos
                 score = v[5]
 
-                strands = prim.info['STR']
+                strands = prim.info['STRANDS']
                 o1 = strands[0]
                 o2 = strands[1]
 
@@ -210,8 +210,12 @@ def vcfToBedpe(vcf_file, bedpe_out):
                         elif o2 == '-':
                             svtype = 'INV'
 
-                evtype = var.info['EVTYPE']
-
+                ev_list = list()
+                for ev in ['PE', 'SR']:
+                    if int(var.info[ev]) > 0:
+                        ev_list.append(ev)
+                evtype = ','.join(ev_list)
+                            
                 format_list = v[8].split(':')
                 sample_gt = dict()
                 var_sample_list = []
@@ -221,13 +225,13 @@ def vcfToBedpe(vcf_file, bedpe_out):
                     format_dict = dict(zip(format_list, gt.split(':')))
                     format_dict['PE'] = int(format_dict['PE'])
                     format_dict['SR'] = int(format_dict['SR'])
-                    format_dict['SUP'] = int(format_dict['SUP'])
-                    if format_dict['SUP'] > 0:
+                    format_dict['SU'] = int(format_dict['SU'])
+                    if format_dict['SU'] > 0:
                         var_sample_list.append(sample_list[i])
                     sample_gt[s] = format_dict
 
-                gt_string = '\t'.join(map(str,[sample_gt[s]['SUP'] for s in sample_list]))
-                support = sum([sample_gt[s]['SUP'] for s in sample_list])
+                gt_string = '\t'.join(map(str,[sample_gt[s]['SU'] for s in sample_list]))
+                support = sum([sample_gt[s]['SU'] for s in sample_list])
 
                 bedpe_out.write('\t'.join(map(str,
                                               [prim.chrom,
