@@ -1,7 +1,3 @@
-
-releas
-cumentation
-
 This document is intended to provide guidelines for software developers either maintaining or 
 contributing to `svtools` development.
 
